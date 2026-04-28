@@ -72,8 +72,8 @@ def update_figure(search):
         title='Breadth (x) vs Depth (y) for commanders in the last two years',
         xaxis=dict(title='# users with a deck for this commander', type='log'),
         yaxis=dict(title='average # deck updates for this commander across users'),
-        height=700,
-        width=1200,
+        height=600,
+        width=1400,
     )
 
 
