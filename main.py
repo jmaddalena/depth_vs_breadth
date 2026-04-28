@@ -44,7 +44,7 @@ def update_figure(search):
             marker=dict(
                 color=unmatched['time_since_release'],
                 colorscale=px.colors.sequential.thermal[::-1],
-                size=8,
+                size=5,
                 opacity=0.1,
             ),
             hoverinfo='skip',
@@ -72,8 +72,6 @@ def update_figure(search):
         title='Breadth (x) vs Depth (y) for commanders in the last two years',
         xaxis=dict(title='# users with a deck for this commander', type='log'),
         yaxis=dict(title='average # deck updates for this commander across users'),
-        height=600,
-        width=1400,
     )
 
 
