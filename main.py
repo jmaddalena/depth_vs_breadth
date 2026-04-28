@@ -61,7 +61,7 @@ def update_figure(search):
             colorscale=px.colors.sequential.thermal[::-1],
             colorbar=dict(title='days since commander release (2 year cap)'),
             size=8,
-            opacity=1.0,
+            opacity=0.8,
         ),
         text=matched['commanders'],
         hovertemplate='<b>%{text}</b><br># users: %{x:,.0f}<br>avg updates: %{y:.3f}<extra></extra>',
