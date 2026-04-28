@@ -44,7 +44,7 @@ def update_figure(search):
             marker=dict(
                 color=unmatched['time_since_release'],
                 colorscale=px.colors.sequential.thermal[::-1],
-                size=5,
+                size=6,
                 opacity=0.1,
             ),
             hoverinfo='skip',
@@ -60,7 +60,7 @@ def update_figure(search):
             color=matched['time_since_release'],
             colorscale=px.colors.sequential.thermal[::-1],
             colorbar=dict(title='days since commander release (2 year cap)'),
-            size=8,
+            size=6,
             opacity=0.8,
         ),
         text=matched['commanders'],
