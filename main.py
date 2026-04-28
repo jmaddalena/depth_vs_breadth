@@ -19,6 +19,10 @@ app.layout = html.Div([
     dcc.Graph(id='scatter', style={'height': '800px'})
 ])
 
+# calculate once outside callback
+cmin = plot_df['time_since_release'].min()
+cmax = plot_df['time_since_release'].max()
+
 @app.callback(Output('scatter', 'figure'), Input('search', 'value'))
 def update_figure(search):
     if not search:
@@ -34,6 +38,14 @@ def update_figure(search):
     else:
         matched = plot_df[plot_df['match']]
         unmatched = plot_df[~plot_df['match']]
+    
+    marker_base = dict(
+        colorscale=px.colors.sequential.thermal[::-1],
+        cmin=cmin,
+        cmax=cmax,
+        size=8,
+    )
+
 
     # non-matching points - no hover
     if not unmatched.empty:
@@ -42,9 +54,8 @@ def update_figure(search):
             y=unmatched['average_num_updates'],
             mode='markers',
             marker=dict(
+                **marker_base,
                 color=unmatched['time_since_release'],
-                colorscale=px.colors.sequential.thermal[::-1],
-                size=6,
                 opacity=0.1,
             ),
             hoverinfo='skip',
@@ -57,10 +68,9 @@ def update_figure(search):
         y=matched['average_num_updates'],
         mode='markers',
         marker=dict(
+            **marker_base,
             color=matched['time_since_release'],
-            colorscale=px.colors.sequential.thermal[::-1],
             colorbar=dict(title='days since commander release (2 year cap)'),
-            size=6,
             opacity=0.8,
         ),
         text=matched['commanders'],
