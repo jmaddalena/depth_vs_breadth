@@ -28,19 +28,44 @@ def update_figure(search):
 
     fig = go.Figure()
 
+    if not search:
+        matched = plot_df
+        unmatched = pd.DataFrame()
+    else:
+        matched = plot_df[plot_df['match']]
+        unmatched = plot_df[~plot_df['match']]
+
+    # non-matching points - no hover
+    if not unmatched.empty:
+        fig.add_trace(go.Scatter(
+            x=unmatched['num_users'],
+            y=unmatched['average_num_updates'],
+            mode='markers',
+            marker=dict(
+                color=unmatched['time_since_release'],
+                colorscale=px.colors.sequential.thermal[::-1],
+                size=8,
+                opacity=0.1,
+            ),
+            hoverinfo='skip',
+            showlegend=False,
+        ))
+
+    # matching points - with hover
     fig.add_trace(go.Scatter(
-        x=plot_df['num_users'],
-        y=plot_df['average_num_updates'],
+        x=matched['num_users'],
+        y=matched['average_num_updates'],
         mode='markers',
         marker=dict(
-            color=plot_df['time_since_release'],
+            color=matched['time_since_release'],
             colorscale=px.colors.sequential.thermal[::-1],
             colorbar=dict(title='days since commander release (2 year cap)'),
             size=8,
-            opacity=plot_df['match'].map({True: 1.0, False: 0.1}).tolist(),
+            opacity=1.0,
         ),
-        text=plot_df['commanders'],
+        text=matched['commanders'],
         hovertemplate='<b>%{text}</b><br># users: %{x:,.0f}<br>avg updates: %{y:.3f}<extra></extra>',
+        showlegend=False,
     ))
 
     fig.update_layout(
@@ -50,6 +75,7 @@ def update_figure(search):
         height=1000,
         width=2000,
     )
+
 
     return fig
 
