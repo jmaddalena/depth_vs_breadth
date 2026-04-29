@@ -5,51 +5,123 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+default_style = {
+    'font-family': 'Arial, sans-serif'
+}
+
 # Load your data into plot_df
 plot_df = pd.read_parquet("depth_vs_breadth_plot_df.parquet", engine='pyarrow')
-
-app = Dash(__name__)
-
-# app.layout = html.Div([
-#     html.H2("Depth vs Breadth for commanders based on last two years of deck updates", style={'fontFamily': 'Arial'}),
-#     dcc.Input(
-#         id='search',
-#         type='text',
-#         placeholder='Search commander...',
-#         style={'padding': '8px', 'width': '300px', 'fontSize': '14px', 'fontFamily': 'Arial'}
-#     ),
-#     dcc.Graph(id='scatter', style={'height': '800px'})
-# ])
-
-
-app.layout = html.Div([
-    html.H2("Breadth (x) vs Depth (y) of commanders based on history of deck updates", style={'fontFamily': 'Arial'}),
-    html.P("This graphic shows the relationship between: X = breadth (number of users with a deck for this commander) and Y = depth (average number of updates for this commander across users after 60 days since deck creation)", style={'fontFamily': 'Arial'}),
-    html.P("The color of the points indicates how long ago the commander was released, with a cap at 2 years. Use the dropdown to highlight specific commanders.", style={'fontFamily': 'Arial'}),
-    html.P("Commanders with less than 200 users are not included.", style={'fontFamily': 'Arial'}),
-    dcc.Dropdown(
-        id='commander-select',
-        options=[{'label': c, 'value': c} for c in sorted(plot_df['commanders'].dropna().unique())],
-        value=[],
-        multi=True,
-        placeholder='Select commanders to highlight...',
-        style={'width': '800px', 'fontSize': '14px', 'fontFamily': 'Arial'}
-    ),
-    dcc.Graph(id='scatter', style={'height': '800px'})
-])
 
 # calculate once outside callback
 cmin = plot_df['time_since_release'].min()
 cmax = plot_df['time_since_release'].max()
 
-@app.callback(Output('scatter', 'figure'), Input('commander-select', 'value'))
-def update_figure(selected_commanders):
-    if not selected_commanders:
+app = Dash(__name__)
+app.layout = html.Div([
+    html.H2("Breadth (x) vs Depth (y) for commanders in the last two years", style={**default_style}),
+    html.Div([
+        dcc.Dropdown(
+            id='commander-select',
+            options=[{'label': c, 'value': c} for c in sorted(plot_df['commanders'].dropna().unique())],
+            value=[],
+            multi=True,
+            placeholder='Select commanders...',
+            style={**default_style, 'width': '400px'}
+        ),
+        dcc.Dropdown(
+            id='set-select',
+            options=[{'label': s, 'value': s} for s in sorted(set(s for sets in plot_df['parent_set'].dropna() for s in sets))],
+            value=[],
+            multi=True,
+            placeholder='Select sets...',
+            style={**default_style, 'width': '400px'}
+        ),
+        dcc.Dropdown(
+            id='color-select',
+            options=[{'label': c, 'value': c} for c in sorted(plot_df['color'].dropna().unique())],
+            value=[],
+            multi=True,
+            placeholder='Select colors...',
+            style={**default_style, 'width': '400px'}
+        ),
+    ], style={'display': 'flex', 'gap': '10px', 'margin': '10px'}),
+    html.Div(id='no-match-message', style={**default_style, 'color': 'red', 'margin': '10px', 'fontSize': '14px'}),
+    dcc.Graph(id='scatter', style={'height': '800px'})
+])
+@app.callback(
+    Output('scatter', 'figure'),
+    Output('no-match-message', 'children'),
+    Output('commander-select', 'options'),
+    Output('set-select', 'options'),
+    Output('color-select', 'options'),
+    Input('commander-select', 'value'),
+    Input('set-select', 'value'),
+    Input('color-select', 'value'),
+)
+def update_figure(selected_commanders, selected_sets, selected_colors):
+    any_selection = any([selected_commanders, selected_sets, selected_colors])
+    
+    if not any_selection:
         matched = plot_df
         unmatched = pd.DataFrame()
+        filtered_df = plot_df
     else:
-        matched = plot_df[plot_df['commanders'].isin(selected_commanders)]
-        unmatched = plot_df[~plot_df['commanders'].isin(selected_commanders)]
+        mask = pd.Series(True, index=plot_df.index)
+        
+        if selected_commanders:
+            mask &= plot_df['commanders'].isin(selected_commanders)
+        if selected_colors:
+            mask &= plot_df['color'].isin(selected_colors)
+        if selected_sets:
+            mask &= plot_df['parent_set'].apply(
+                lambda x: bool(set(x if x is not None else ()) & set(selected_sets))
+            )
+        
+        matched = plot_df[mask]
+        unmatched = plot_df[~mask]
+        filtered_df = matched
+
+    # build filtered options from matched set
+    # for commanders: show all commanders that match the SET and COLOR filters (but not commander filter)
+    set_color_mask = pd.Series(True, index=plot_df.index)
+    if selected_sets:
+        set_color_mask &= plot_df['parent_set'].apply(
+            lambda x: bool(set(x if x is not None else ()) & set(selected_sets))
+        )
+    if selected_colors:
+        set_color_mask &= plot_df['color'].isin(selected_colors)
+
+    commander_options = [{'label': c, 'value': c} for c in sorted(
+        set(plot_df[set_color_mask]['commanders'].dropna().unique()) | set(selected_commanders or [])
+    )]
+
+    # for sets: show all sets that match the COMMANDER and COLOR filters
+    commander_color_mask = pd.Series(True, index=plot_df.index)
+    if selected_commanders:
+        commander_color_mask &= plot_df['commanders'].isin(selected_commanders)
+    if selected_colors:
+        commander_color_mask &= plot_df['color'].isin(selected_colors)
+
+    set_options = [{'label': s, 'value': s} for s in sorted(
+        set(s for sets in plot_df[commander_color_mask]['parent_set'].dropna() for s in sets) | set(selected_sets or [])
+    )]
+
+    # for colors: show all colors that match the COMMANDER and SET filters
+    commander_set_mask = pd.Series(True, index=plot_df.index)
+    if selected_commanders:
+        commander_set_mask &= plot_df['commanders'].isin(selected_commanders)
+    if selected_sets:
+        commander_set_mask &= plot_df['parent_set'].apply(
+            lambda x: bool(set(x if x is not None else ()) & set(selected_sets))
+        )
+
+    color_options = [{'label': c, 'value': c} for c in sorted(
+        set(plot_df[commander_set_mask]['color'].dropna().unique()) | set(selected_colors or [])
+    )]
+    if any_selection and matched.empty:
+        message = "No commanders match the selected combination."
+    else:
+        message = ""
 
     marker_base = dict(
         colorscale=px.colors.sequential.thermal[::-1],
@@ -76,6 +148,7 @@ def update_figure(selected_commanders):
         ))
 
     # matching points - with hover
+    # matching points - with hover
     fig.add_trace(go.Scatter(
         x=matched['num_users'],
         y=matched['average_num_updates'],
@@ -87,7 +160,16 @@ def update_figure(selected_commanders):
             opacity=0.8,
         ),
         text=matched['commanders'],
-        hovertemplate='<b>%{text}</b><br># users: %{x:,.0f}<br>avg updates: %{y:.3f}<extra></extra>',
+        customdata=matched[['time_since_release', 'color', 'parent_set']].values,
+        hovertemplate=(
+            '<b>%{text}</b><br>'
+            'color: %{customdata[1]}<br>'
+            'sets: %{customdata[2]}<br>'
+            'days since release: %{customdata[0]:.0f}<br>'
+            '# users: %{x:,.0f}<br>'
+            'avg updates: %{y:.3f}<br>'
+            '<extra></extra>'
+        ),
         showlegend=False,
     ))
 
@@ -97,8 +179,7 @@ def update_figure(selected_commanders):
         yaxis=dict(title='Depth = average deck updates for this commander across users'),
     )
 
-
-    return fig
+    return fig, message, commander_options, set_options, color_options
 
 server = app.server
 

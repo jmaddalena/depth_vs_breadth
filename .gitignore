@@ -1,0 +1,5 @@
+*.parquet
+*.html
+*.csv
+venv/
+venv_app/
