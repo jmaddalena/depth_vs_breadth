@@ -12,9 +12,12 @@ default_style = {
 # Load your data into plot_df
 plot_df = pd.read_parquet("depth_vs_breadth_plot_df.parquet", engine='pyarrow')
 
+# sort sets by release date
+set_order = plot_df.loc[plot_df['parent_set'].apply(len) == 1][['parent_set', 'released_at']].explode('parent_set').drop_duplicates('parent_set').sort_values('released_at')['parent_set'].tolist()
+
 # calculate once outside callback
-cmin = plot_df['time_since_release'].min()
-cmax = plot_df['time_since_release'].max()
+cmin = plot_df['time_since_release_capped'].min()
+cmax = plot_df['time_since_release_capped'].max()
 
 app = Dash(__name__)
 app.layout = html.Div([
@@ -30,11 +33,12 @@ app.layout = html.Div([
         ),
         dcc.Dropdown(
             id='set-select',
-            options=[{'label': s, 'value': s} for s in sorted(set(s for sets in plot_df['parent_set'].dropna() for s in sets))],
+            options=[{'label': s, 'value': s} for s in set_order],
             value=[],
             multi=True,
             placeholder='Select sets...',
-            style={**default_style, 'width': '400px'}
+            style={**default_style, 'width': '400px'},
+            optionHeight=35,  # add this
         ),
         dcc.Dropdown(
             id='color-select',
@@ -102,9 +106,12 @@ def update_figure(selected_commanders, selected_sets, selected_colors):
     if selected_colors:
         commander_color_mask &= plot_df['color'].isin(selected_colors)
 
-    set_options = [{'label': s, 'value': s} for s in sorted(
-        set(s for sets in plot_df[commander_color_mask]['parent_set'].dropna() for s in sets) | set(selected_sets or [])
-    )]
+    available_sets = set(s for sets in plot_df[commander_color_mask]['parent_set'].dropna() for s in sets)
+    set_options = [
+        {'label': s, 'value': s} 
+        for s in set_order 
+        if s in available_sets or s in (selected_sets or [])
+    ]
 
     # for colors: show all colors that match the COMMANDER and SET filters
     commander_set_mask = pd.Series(True, index=plot_df.index)
@@ -140,7 +147,7 @@ def update_figure(selected_commanders, selected_sets, selected_colors):
             mode='markers',
             marker=dict(
                 **marker_base,
-                color=unmatched['time_since_release'],
+                color=unmatched['time_since_release_capped'],
                 opacity=0.1,
             ),
             hoverinfo='skip',
@@ -148,14 +155,13 @@ def update_figure(selected_commanders, selected_sets, selected_colors):
         ))
 
     # matching points - with hover
-    # matching points - with hover
     fig.add_trace(go.Scatter(
         x=matched['num_users'],
         y=matched['average_num_updates'],
         mode='markers',
         marker=dict(
             **marker_base,
-            color=matched['time_since_release'],
+            color=matched['time_since_release_capped'],
             colorbar=dict(title='days since commander release (2 year cap)'),
             opacity=0.8,
         ),
