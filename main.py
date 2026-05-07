@@ -5,12 +5,17 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+from datetime import date
+
 default_style = {
     'font-family': 'Arial, sans-serif'
 }
 
 # Load your data into plot_df
 plot_df = pd.read_parquet("depth_vs_breadth_plot_df.parquet", engine='pyarrow')
+
+min_release_date = plot_df['released_at'].min().date()
+max_release_date = plot_df['released_at'].max().date()
 
 # sort sets by release date
 set_order = plot_df.loc[plot_df['parent_set'].apply(len) == 1][['parent_set', 'released_at']].explode('parent_set').drop_duplicates('parent_set').sort_values('released_at')['parent_set'].tolist()
@@ -38,7 +43,7 @@ app.layout = html.Div([
             multi=True,
             placeholder='Select sets...',
             style={**default_style, 'width': '400px'},
-            optionHeight=35,  # add this
+            optionHeight=35,
         ),
         dcc.Dropdown(
             id='color-select',
@@ -49,9 +54,22 @@ app.layout = html.Div([
             style={**default_style, 'width': '400px'}
         ),
     ], style={'display': 'flex', 'gap': '10px', 'margin': '10px'}),
+    html.Div([
+        html.Label("Select date range for commander initial release date", style={**default_style, 'margin': '10px'}),
+        dcc.DatePickerRange(
+            id='commander-release-date-range', 
+            min_date_allowed=min_release_date,
+            max_date_allowed=max_release_date,
+            start_date=min_release_date,
+            end_date=max_release_date,
+            style={**default_style, 'margin': '10px', 'width': 'fit-content'}
+        )
+    ]),
     html.Div(id='no-match-message', style={**default_style, 'color': 'red', 'margin': '10px', 'fontSize': '14px'}),
     dcc.Graph(id='scatter', style={'height': '800px'})
 ])
+
+
 @app.callback(
     Output('scatter', 'figure'),
     Output('no-match-message', 'children'),
@@ -61,14 +79,15 @@ app.layout = html.Div([
     Input('commander-select', 'value'),
     Input('set-select', 'value'),
     Input('color-select', 'value'),
+    Input('commander-release-date-range', 'start_date'),
+    Input('commander-release-date-range', 'end_date'),
 )
-def update_figure(selected_commanders, selected_sets, selected_colors):
-    any_selection = any([selected_commanders, selected_sets, selected_colors])
+def update_figure(selected_commanders, selected_sets, selected_colors, start_date, end_date):
+    any_selection = any([selected_commanders, selected_sets, selected_colors, start_date, end_date])
     
     if not any_selection:
         matched = plot_df
         unmatched = pd.DataFrame()
-        filtered_df = plot_df
     else:
         mask = pd.Series(True, index=plot_df.index)
         
@@ -80,10 +99,16 @@ def update_figure(selected_commanders, selected_sets, selected_colors):
             mask &= plot_df['parent_set'].apply(
                 lambda x: bool(set(x if x is not None else ()) & set(selected_sets))
             )
+
+        if start_date:
+            mask &= plot_df['released_at'] >= pd.to_datetime(start_date)
+        if end_date:
+            mask &= plot_df['released_at'] <= pd.to_datetime(end_date)
+        if start_date or end_date:
+            selected_commanders = plot_df.loc[mask, 'commanders'].unique()
         
         matched = plot_df[mask]
         unmatched = plot_df[~mask]
-        filtered_df = matched
 
     # build filtered options from matched set
     # for commanders: show all commanders that match the SET and COLOR filters (but not commander filter)
@@ -166,12 +191,12 @@ def update_figure(selected_commanders, selected_sets, selected_colors):
             opacity=0.8,
         ),
         text=matched['commanders'],
-        customdata=matched[['time_since_release', 'color', 'parent_set']].values,
+        customdata=matched[['released_at', 'color', 'parent_set']].values,
         hovertemplate=(
             '<b>%{text}</b><br>'
             'color: %{customdata[1]}<br>'
             'sets: %{customdata[2]}<br>'
-            'days since release: %{customdata[0]:.0f}<br>'
+            'release date: %{customdata[0]|%Y-%m-%d}<br>'
             '# users: %{x:,.0f}<br>'
             'avg updates: %{y:.3f}<br>'
             '<extra></extra>'
