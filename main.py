@@ -91,13 +91,6 @@ def update_figure(selected_commanders, selected_sets, selected_colors, start_dat
     else:
         mask = pd.Series(True, index=plot_df.index)
 
-        if start_date:
-            mask &= plot_df['released_at'] >= pd.to_datetime(start_date)
-        if end_date:
-            mask &= plot_df['released_at'] <= pd.to_datetime(end_date)
-        if start_date or end_date:
-            selected_commanders = plot_df.loc[mask, 'commanders'].unique()
-        
         if selected_commanders:
             mask &= plot_df['commanders'].isin(selected_commanders)
         if selected_colors:
@@ -106,7 +99,14 @@ def update_figure(selected_commanders, selected_sets, selected_colors, start_dat
             mask &= plot_df['parent_set'].apply(
                 lambda x: bool(set(x if x is not None else ()) & set(selected_sets))
             )
-
+        
+        if start_date:
+            mask &= plot_df['released_at'] >= pd.to_datetime(start_date)
+        if end_date:
+            mask &= plot_df['released_at'] <= pd.to_datetime(end_date)
+        if start_date or end_date:
+            selected_commanders = plot_df.loc[mask, 'commanders'].unique().tolist()
+        
         matched = plot_df[mask]
         unmatched = plot_df[~mask]
 
